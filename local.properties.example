@@ -1,0 +1,9 @@
+# Copy to local.properties. Public configuration only; every key is optional.
+# haven.aol.canisterId=gny6k-fqaaa-aaaab-ag3ra-cai
+# haven.aol.icHost=https://ic0.app
+# arkiv.endpointUrl=https://rpc.tiramisu.db-chain.testnet.arkiv.network
+# evm.rpc.ethereum=
+# evm.rpc.base=
+# evm.rpc.arbitrum=
+# evm.rpc.optimism=
+# evm.rpc.sepolia=

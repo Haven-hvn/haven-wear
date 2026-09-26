@@ -1,0 +1,12 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+captures/
+.kotlin/
+
+# Native unwrap: built by tools/build-vetkeys-android.sh, never committed.
+app/src/main/jniLibs/
+app/src/main/rust/haven_vetkeys/target/

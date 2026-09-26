@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Haven" parent="@android:style/Theme.DeviceDefault">
+        <item name="android:windowBackground">@color/haven_black</item>
+    </style>
+
+    <style name="Theme.Haven.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/haven_black</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_logo</item>
+        <item name="postSplashScreenTheme">@style/Theme.Haven</item>
+    </style>
+</resources>
