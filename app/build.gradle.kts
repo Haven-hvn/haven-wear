@@ -16,7 +16,7 @@ fun prop(key: String, default: String = ""): String = "\"${localProps.getPropert
 
 android {
     namespace = "haven.wear"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "haven.wear"

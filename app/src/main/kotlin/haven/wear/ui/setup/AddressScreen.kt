@@ -13,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.wear.compose.foundation.ScrollInfoProvider
 import androidx.wear.compose.material3.CircularProgressIndicator
 import androidx.wear.compose.material3.EdgeButton
 import androidx.wear.compose.material3.MaterialTheme
@@ -37,7 +38,7 @@ fun AddressScreen(
 ) {
     val scroll = rememberScrollState()
     ScreenScaffold(
-        scrollState = scroll,
+        scrollInfoProvider = ScrollInfoProvider(scroll),
         timeText = {},
         edgeButton = {
             if (onDone != null) EdgeButton(onClick = onDone) { Text("Continue") }

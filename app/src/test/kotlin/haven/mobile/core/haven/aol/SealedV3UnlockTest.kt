@@ -181,7 +181,7 @@ class SealedV3UnlockTest {
         assertEquals(11155111L, domain.getLong("chainId"))
         assertEquals(GateRequestBuilder.EIP712_VERIFYING_CONTRACT, domain.getString("verifyingContract"))
         val message = json.getJSONObject("message")
-        assertEquals(setOf("evmAddress", "transportPublicKey", "epoch", "nonce"), message.keySet())
+        assertEquals(setOf("evmAddress", "transportPublicKey", "epoch", "nonce"), message.keys().asSequence().toSet())
         assertEquals("680", message.getString("epoch"))
     }
 

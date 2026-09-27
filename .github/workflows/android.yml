@@ -1,0 +1,107 @@
+name: android
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout haven-wear
+        uses: actions/checkout@v4
+
+      # Temporary: foc-cache 0.2.0 is not on Maven Central yet. Builds it from
+      # source at a pinned commit and publishes to Maven Local, which
+      # settings.gradle.kts resolves via mavenLocal(). Remove this checkout,
+      # the ephemeral GPG key, and the publish step once 0.2.0 is published.
+      - name: Checkout foc-local-first-android
+        uses: actions/checkout@v4
+        with:
+          repository: Haven-hvn/foc-local-first-android
+          ref: 2585ba1af419470113c19c4c5872a2590d549457
+          path: foc-local-first-android
+
+      # JDK 21: web3j crypto 4.14.0 ships Java 21 bytecode, so unit tests need
+      # a 21 runtime even though the app targets Java 17.
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew foc-local-first-android/gradlew
+
+      - name: Create local.properties for CI (real config so startup succeeds)
+        run: |
+          cat > local.properties <<'EOF'
+          sdk.dir=/usr/local/lib/android/sdk
+          haven.aol.canisterId=gny6k-fqaaa-aaaab-ag3ra-cai
+          haven.aol.icHost=https://ic0.app
+          arkiv.endpointUrl=https://rpc.tiramisu.db-chain.testnet.arkiv.network
+          EOF
+          cat local.properties
+
+      - name: Generate ephemeral GPG key (foc mavenLocal signing)
+        run: |
+          gpg --batch --passphrase '' --quick-generate-key "ci@localhost" default default 0
+          gpg --list-secret-keys | head -n 5
+
+      - name: Publish foc-cache to Maven Local
+        working-directory: foc-local-first-android
+        run: ./gradlew :foc-cache:publishToMavenLocal
+
+      - name: Install Android NDK (vetkeys native library)
+        run: |
+          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null
+          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "ndk;29.0.14206865"
+          echo "ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk/29.0.14206865" >> "$GITHUB_ENV"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src/main/rust/haven_vetkeys
+
+      - name: VetKeys host tests (crypto logic gate)
+        working-directory: app/src/main/rust/haven_vetkeys
+        run: cargo test --locked
+
+      - name: Build vetkeys native libraries
+        run: bash tools/build-vetkeys-android.sh
+
+      - name: Run unit tests
+        run: ./gradlew :app:testDebugUnitTest --continue
+
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      # Order is documented in RELEASING.md: signed tag is pushed first, then the
+      # release is created, so by the time this step runs the release exists.
+      - name: Upload to existing release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${GITHUB_REF_NAME}" app/build/outputs/apk/debug/app-debug.apk --clobber --repo Haven-hvn/haven-wear

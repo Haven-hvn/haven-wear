@@ -15,7 +15,8 @@ data class Track(
 ) {
     val id: String get() = item.id
     val title: String get() = item.title.ifBlank { "Untitled" }
-    val artistKey: String get() = (item.creatorAddress ?: item.owner).lowercase()
+    val artistKey: String get() =
+        (item.creatorHandle?.takeIf { it.isNotBlank() } ?: item.creatorAddress ?: item.owner).lowercase()
     val artistName: String get() = item.creatorHandle?.takeIf { it.isNotBlank() } ?: shortAddress(item.owner)
     val pieceCid: String? get() = item.pieceRef?.pieceCid
     val isPlayable: Boolean get() = access is Access.Open

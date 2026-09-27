@@ -2,7 +2,7 @@
 
 A standalone Wear OS music player for Haven-AOL gated audio. No phone, no account and no ICP wallet. The watch holds its own EVM key, unlocks gate versions v1, v3 and v4 against the canister by itself, and plays through Media3.
 
-> Status: code only. It has **not** been compiled or run, and neither has any test. See [Unverified](#unverified).
+> Status: builds and all 194 unit tests pass (locally and in the `android` workflow). It has not been run on a watch yet. See [Unverified](#unverified).
 
 ## Setup
 
@@ -15,6 +15,13 @@ evm.rpc.base=https://base-rpc.publicnode.com   # also .ethereum .arbitrum .optim
 ```
 
 Only public configuration goes into `BuildConfig`. No key, seed or token is ever built into the app.
+
+Build with JDK 21 (web3j 4.14.0 ships Java 21 bytecode, so unit tests need a 21 runtime). `foc-cache` 0.2.0 is not on Maven Central yet, so publish it locally first (the build resolves it via `mavenLocal()`):
+
+```sh
+# in foc-local-first-android
+./gradlew :foc-cache:publishToMavenLocal
+```
 
 The key-unwrap native library comes from `app/src/main/rust/haven_vetkeys` through `tools/build-vetkeys-android.sh`, which runs before the JNI libraries are merged. It needs `cargo` and an NDK. Without them the build still succeeds, but sealed tracks report that the library is missing and won't unlock.
 
@@ -62,8 +69,6 @@ Everything else is in `haven/wear/**`: `wallet`, `library`, `playback`, `tile`, 
 
 ## Unverified
 
-- **Not compiled.** No Android SDK was used, and none of the Compose, Horologist, Media3 or protolayout API calls have been compiled.
-- **foc-cache 0.2.0 is not published yet.** Publish it from `foc-local-first-android` (or `publishToMavenLocal` and add `mavenLocal()`) before building.
-- **Unconfirmed versions:** `com.google.zxing:core:3.5.3`, `androidx.wear.tiles:tiles:1.5.0`, `androidx.wear.protolayout:protolayout:1.3.0` and `horologist-tiles:0.7.15` are pinned but weren't checked against a repository here. `web3j crypto 4.14.0` was confirmed in the local Gradle cache. The Wear, Compose and Media3 versions match compose-samples/Jetcaster.
-- **web3j dependencies:** its EIP-4844 dependencies (`jc-kzg-4844`, tuweni) are excluded. The R8 rules assume nothing on the signing path reaches them.
-- **Tests:** the new tests (wallet vectors and EIP-712 parity with `main.mo`, library model and codec, the library intersection with fakes) and the ported haven-mobile tests have never been run.
+- **Not run on a watch.** The debug APK builds, but no run on hardware or an emulator has been done yet.
+- **foc-cache 0.2.0 is not published yet.** Until it is, publish it from `foc-local-first-android` (`publishToMavenLocal`; the build resolves it via `mavenLocal()`). Remove the workaround once 0.2.0 is on Maven Central.
+- **Release minification.** The debug APK builds with minification off. The release R8 rules (including the assumption that nothing on the web3j signing path reaches its excluded EIP-4844 dependencies) haven't been exercised by a release build yet.

@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.wear.compose.foundation.ScrollInfoProvider
 import androidx.wear.compose.material3.EdgeButton
 import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.MaterialTheme
@@ -45,7 +46,7 @@ fun LockedScreen(
     val access = track.access
     val scroll = rememberScrollState()
     ScreenScaffold(
-        scrollState = scroll,
+        scrollInfoProvider = ScrollInfoProvider(scroll),
         timeText = {},
         edgeButton = {
             when (access) {

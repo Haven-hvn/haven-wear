@@ -12,6 +12,7 @@ import androidx.wear.protolayout.ResourceBuilders
 import androidx.wear.protolayout.TimelineBuilders
 import androidx.wear.tiles.RequestBuilders
 import androidx.wear.tiles.TileBuilders
+import com.google.android.horologist.annotations.ExperimentalHorologistApi
 import com.google.android.horologist.tiles.SuspendingTileService
 import dagger.hilt.android.AndroidEntryPoint
 import haven.wear.MainActivity
@@ -24,6 +25,7 @@ import javax.inject.Inject
  * Plain protolayout (no Material tile components) so it depends on as little API surface as
  * possible. Colours match the app theme.
  */
+@OptIn(ExperimentalHorologistApi::class)
 @AndroidEntryPoint
 class ResumeTileService : SuspendingTileService() {
 

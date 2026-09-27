@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.wear.compose.foundation.ScrollInfoProvider
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
 import androidx.wear.compose.foundation.lazy.itemsIndexed
 import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
@@ -100,7 +101,7 @@ fun RecoveryPhraseScreen(loadWords: suspend () -> List<String>, onDone: () -> Un
 private fun Intro(lockMissing: Boolean, onShow: () -> Unit, onSetLock: () -> Unit) {
     val scroll = rememberScrollState()
     ScreenScaffold(
-        scrollState = scroll,
+        scrollInfoProvider = ScrollInfoProvider(scroll),
         timeText = {},
         edgeButton = {
             if (lockMissing) EdgeButton(onClick = onSetLock) { Text("Set screen lock") }
