@@ -684,7 +684,10 @@ class ArkivClientImpl @Inject constructor(
      * without touching the network.
      */
     internal fun JSONObject.toMediaItem(): MediaItem {
-        val mimeType = firstMime("mime", "mimeType", "contentMimeType")
+        // `ct` last: the payload carries the MIME *string* on audio/generic groups
+        // (MP3 has no enum code), so without it a v3 album resolves mimeType null,
+        // extension null, kind FILE — and never reaches the audio player.
+        val mimeType = firstMime("mime", "mimeType", "contentMimeType", "ct")
         val sourceUri = firstString("src", "sourceUri")
         val extension = deriveExtension(mimeType, sourceUri)
         val title = firstString("title") ?: "Untitled"

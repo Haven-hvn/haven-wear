@@ -1,6 +1,7 @@
 package haven.mobile.core.arkiv
 
 import haven.mobile.core.domain.GateMetadata
+import haven.mobile.core.domain.MediaKind
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -87,6 +88,39 @@ class PayloadMergeTest {
         assertEquals("1", gate.threshold)
         assertTrue(item.cidEncryptionMetadata is GateMetadata.Sealed, "cid layer sealed too")
         assertEquals("eip155:11155111", item.gate?.chain)
+    }
+
+    @Test
+    fun `payload ct resolves the MIME when no mime enum exists (v3 album)`() {
+        // Live incident (mobile parity): the v3 album release carries no `mime`
+        // attr (MP3 has no enum code) — only payload `ct: audio/mpeg`. Without
+        // the `ct` fallback the item resolved mimeType null, extension null,
+        // kind FILE, and never reached the audio player.
+        val row = JSONObject()
+            .put("key", "0x" + "e6".repeat(32))
+            .put("owner", "0xOwner")
+            .put("creator", "0xOwner")
+            .put("contentType", "application/json")
+            .put("payload", hexPayload(JSONObject()
+                .put("name", "test_band_test_album_1971.released.mp3.enc")
+                .put("ct", "audio/mpeg")
+                .put("piece", "bafkpiece")
+                .put("gate", sealedGate())
+                .toString()))
+            .put("attributes", JSONArray()
+                .put(attr("title", "str", "Test Band - Test Album (1971) [DE]"))
+                .put(attr("gate_chain", "i32", 11155111))
+                .put(attr("gate_token", "str", "0xtoken"))
+                .put(attr("gate_threshold", "str", "1000000000000000000"))
+                .put(attr("gate_type", "i32", 3))
+                .put(attr("grp", "str", "haven.audio.full"))
+                .put(attr("sha256_ct", "str", "abc123")))
+        val item = with(client) { normalizeRpcEntity(row).toMediaItem() }
+
+        assertEquals("audio/mpeg", item.mimeType)
+        assertEquals(".mp3", item.fileExtension)
+        assertEquals(MediaKind.AUDIO, item.kind)
+        assertTrue(item.isEncrypted)
     }
 
     @Test
