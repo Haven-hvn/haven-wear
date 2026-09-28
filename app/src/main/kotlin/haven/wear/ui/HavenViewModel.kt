@@ -10,14 +10,17 @@ import haven.wear.library.Library
 import haven.wear.library.LibraryRepository
 import haven.wear.library.Track
 import haven.wear.playback.ArtworkStore
+import haven.wear.playback.AudioChapter
 import haven.wear.playback.NowPlaying
 import haven.wear.playback.PlayerConnection
 import haven.wear.playback.TrackFiles
+import haven.wear.playback.readId3Chapters
 import haven.wear.wallet.WatchWallet
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -54,6 +57,14 @@ class HavenViewModel @Inject constructor(
 
     val positionMs: Long get() = player.positionMs
 
+    /**
+     * Cue points inside the playing track: merged single-file albums carry one ID3 chapter
+     * per song, parsed from the local file (already on the watch — it is playing). Empty
+     * for ordinary tracks, so the chapters entry only appears where it leads somewhere.
+     */
+    private val _chapters = MutableStateFlow<List<AudioChapter>>(emptyList())
+    val chapters: StateFlow<List<AudioChapter>> = _chapters.asStateFlow()
+
     init {
         // Covers saved beside tracks already on the watch come back after a restart.
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -62,6 +73,14 @@ class HavenViewModel @Inject constructor(
                 artworkStore.load(
                     lib?.tracks.orEmpty().mapNotNull { t -> t.pieceCid?.let { t.id to trackFiles.artFile(it) } },
                 )
+            }
+        }
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            player.state.map { it.mediaId }.distinctUntilChanged().collect { id ->
+                val track = id?.let { libraryRepository.library.value?.track(it) }
+                _chapters.value = track?.let {
+                    runCatching { readId3Chapters(trackFiles.file(it.item)) }.getOrDefault(emptyList())
+                } ?: emptyList()
             }
         }
     }
@@ -98,6 +117,7 @@ class HavenViewModel @Inject constructor(
     fun toggleShuffle() = player.toggleShuffle()
     fun cycleRepeat() = player.cycleRepeat()
     fun skipTo(index: Int) = player.skipTo(index)
+    fun seekTo(positionMs: Long) = player.seekTo(positionMs)
 
     private companion object {
         const val KEY_SETUP_DONE = "setup_done"

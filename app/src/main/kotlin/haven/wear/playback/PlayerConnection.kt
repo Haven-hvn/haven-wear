@@ -102,6 +102,9 @@ class PlayerConnection @Inject constructor(
 
     fun skipTo(queueIndex: Int) = withController { if (queueIndex in 0 until it.mediaItemCount) it.seekToDefaultPosition(queueIndex) }
 
+    /** Jump within the playing track — the chapters screen seeks to cue points through this. */
+    fun seekTo(positionMs: Long) = withController { it.seekTo(positionMs.coerceAtLeast(0L)) }
+
     /** Tile / launcher "resume": continue what was playing, or rebuild the last queue. */
     fun resume() = withController { c ->
         if (c.mediaItemCount == 0) {

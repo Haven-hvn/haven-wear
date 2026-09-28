@@ -2,7 +2,9 @@ package haven.mobile.core.arkiv
 
 import org.json.JSONObject
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
@@ -47,5 +49,24 @@ class GateDiscoveryTest {
         assertNull(
             gateOf("""{"gate_token":"0xabcDEF1234567890abcdef1234567890ABCDEF12","gate_chain":999999}"""),
         )
+    }
+
+    @Test
+    fun `discovery scan covers every Haven group including audio`() {
+        // An audio-only community's gate lives solely on haven.audio.full rows —
+        // dropping the group from the scan hides the whole DAO from discovery.
+        for (group in listOf("haven.video.full", "haven.video.drip.series", "haven.video.drip.part", "haven.audio.full")) {
+            assertTrue(HAVEN_GROUPS_QUERY.contains("grp = str('$group')"), "scan misses $group")
+        }
+    }
+
+    @Test
+    fun `discovery scan stays a flat OR chain`() {
+        // The query language has no `||`, and parenthesised boolean groups are untested
+        // against the node — the scan must render exactly like the SDK's or(...).
+        // (`str(...)` calls own the only parens; none may wrap a whole predicate.)
+        assertTrue(HAVEN_GROUPS_QUERY.contains(" OR "))
+        assertFalse(HAVEN_GROUPS_QUERY.contains("||"))
+        assertFalse(HAVEN_GROUPS_QUERY.contains("(grp"))
     }
 }

@@ -36,6 +36,7 @@ import haven.wear.ui.library.CollectionsScreen
 import haven.wear.ui.library.LibraryHome
 import haven.wear.ui.library.TrackListScreen
 import haven.wear.ui.locked.LockedScreen
+import haven.wear.ui.player.ChaptersScreen
 import haven.wear.ui.player.NowPlayingScreen
 import haven.wear.ui.player.QueueScreen
 import haven.wear.ui.settings.RecoveryPhraseScreen
@@ -49,6 +50,7 @@ private object Routes {
     const val HOME = "home"
     const val VOLUME = "volume"
     const val QUEUE = "queue"
+    const val CHAPTERS = "chapters"
     const val COLLECTIONS = "collections"
     const val COLLECTION = "collection/{key}"
     const val ARTISTS = "artists"
@@ -78,6 +80,7 @@ fun WearApp(navController: NavHostController, resumeRequests: StateFlow<Int>) {
     val library by vm.library.collectAsStateWithLifecycle()
     val art by vm.art.collectAsStateWithLifecycle()
     val nowPlaying by vm.nowPlaying.collectAsStateWithLifecycle()
+    val chapters by vm.chapters.collectAsStateWithLifecycle()
     val address by vm.address.collectAsStateWithLifecycle()
     val refreshing by vm.refreshing.collectAsStateWithLifecycle()
     val resume by resumeRequests.collectAsStateWithLifecycle()
@@ -132,6 +135,8 @@ fun WearApp(navController: NavHostController, resumeRequests: StateFlow<Int>) {
                                 onShuffle = vm::toggleShuffle,
                                 onRepeat = vm::cycleRepeat,
                                 onQueue = { navController.navigate(Routes.QUEUE) },
+                                chapters = chapters,
+                                onChapters = { navController.navigate(Routes.CHAPTERS) },
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .requestFocusOnHierarchyActive()
@@ -178,6 +183,18 @@ fun WearApp(navController: NavHostController, resumeRequests: StateFlow<Int>) {
                         vm.skipTo(index)
                         navController.popBackStack()
                     })
+                }
+
+                composable(Routes.CHAPTERS) {
+                    ChaptersScreen(
+                        chapters = chapters,
+                        positionMs = { vm.positionMs },
+                        isPlaying = nowPlaying.isPlaying,
+                        onSeekTo = { startMs ->
+                            vm.seekTo(startMs)
+                            navController.popBackStack()
+                        },
+                    )
                 }
 
                 composable(Routes.COLLECTIONS) {
