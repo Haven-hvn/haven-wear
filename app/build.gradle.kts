@@ -54,6 +54,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Required by io.github.haven-hvn:foc-cache:0.2.0 (declares core library
+        // desugaring in its AAR metadata). Same fix as haven-mobile.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     packaging {
@@ -77,6 +80,9 @@ tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders"
     .configureEach { dependsOn(buildVetKeys) }
 
 dependencies {
+    // Matches foc-cache's desugar_jdk_libs version for a single desugared core set.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.activity.compose)
