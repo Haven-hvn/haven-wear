@@ -16,12 +16,7 @@ evm.rpc.base=https://base-rpc.publicnode.com   # also .ethereum .arbitrum .optim
 
 Only public configuration goes into `BuildConfig`. No key, seed or token is ever built into the app.
 
-Build with JDK 21 (web3j 4.14.0 ships Java 21 bytecode, so unit tests need a 21 runtime). `foc-cache` 0.2.0 is not on Maven Central yet, so publish it locally first (the build resolves it via `mavenLocal()`):
-
-```sh
-# in foc-local-first-android
-./gradlew :foc-cache:publishToMavenLocal
-```
+Build with JDK 21 (web3j 4.14.0 ships Java 21 bytecode, so unit tests need a 21 runtime). `foc-cache` 0.2.0 resolves from Maven Central like every other dependency.
 
 The key-unwrap native library comes from `app/src/main/rust/haven_vetkeys` through `tools/build-vetkeys-android.sh`, which runs before the JNI libraries are merged. It needs `cargo` and an NDK. Without them the build still succeeds, but sealed tracks report that the library is missing and won't unlock.
 

@@ -19,17 +19,6 @@ jobs:
       - name: Checkout haven-wear
         uses: actions/checkout@v4
 
-      # Temporary: foc-cache 0.2.0 is not on Maven Central yet. Builds it from
-      # source at a pinned commit and publishes to Maven Local, which
-      # settings.gradle.kts resolves via mavenLocal(). Remove this checkout,
-      # the ephemeral GPG key, and the publish step once 0.2.0 is published.
-      - name: Checkout foc-local-first-android
-        uses: actions/checkout@v4
-        with:
-          repository: Haven-hvn/foc-local-first-android
-          ref: 2585ba1af419470113c19c4c5872a2590d549457
-          path: foc-local-first-android
-
       # JDK 21: web3j crypto 4.14.0 ships Java 21 bytecode, so unit tests need
       # a 21 runtime even though the app targets Java 17.
       - name: Set up JDK 21
@@ -43,7 +32,7 @@ jobs:
         uses: android-actions/setup-android@v4
 
       - name: Grant execute permission for gradlew
-        run: chmod +x gradlew foc-local-first-android/gradlew
+        run: chmod +x gradlew
 
       - name: Create local.properties for CI (real config so startup succeeds)
         run: |
@@ -54,15 +43,6 @@ jobs:
           arkiv.endpointUrl=https://rpc.tiramisu.db-chain.testnet.arkiv.network
           EOF
           cat local.properties
-
-      - name: Generate ephemeral GPG key (foc mavenLocal signing)
-        run: |
-          gpg --batch --passphrase '' --quick-generate-key "ci@localhost" default default 0
-          gpg --list-secret-keys | head -n 5
-
-      - name: Publish foc-cache to Maven Local
-        working-directory: foc-local-first-android
-        run: ./gradlew :foc-cache:publishToMavenLocal
 
       - name: Install Android NDK (vetkeys native library)
         run: |
