@@ -295,4 +295,50 @@ class CarContainerTest {
     fun `empty stream stays empty`() = runBlocking {
         assertEquals(0, flowOf<ByteArray>().stripCarContainer().toList().size)
     }
+
+    @Test
+    fun `single-block car emits payload before the frame completes`() = runBlocking {
+        // Regression: the stripper used to buffer each frame whole, so a 47MB+
+        // single-block piece emitted nothing until the entire download assembled
+        // (progress pinned at 0%) and spiked ~3x the file size in heap (OOM).
+        // Raw payloads must flow as they arrive.
+        val data = ByteArray(200 * 1024) { (it * 5).toByte() }
+        val car = singleBlockCar(data)
+        val chunks = split(car, List(300) { 997 })
+        val half = chunks.subList(0, chunks.size / 2)
+        val emitted = mutableListOf<ByteArray>()
+        try {
+            flow { half.forEach { emit(it) } }.stripCarContainer().collect { emitted += it }
+            throw AssertionError("expected Truncated CAR container")
+        } catch (e: HavenError.PlaybackDecryptFailed) {
+            assertTrue(e.message!!.contains("Truncated"))
+        }
+        val prefix = emitted.fold(ByteArray(0)) { acc, b -> acc + b }
+        assertTrue(prefix.isNotEmpty())
+        assertTrue(prefix.size < data.size)
+        assertArrayEquals(data.copyOfRange(0, prefix.size), prefix)
+        // Exact accounting: every received byte past the container overhead flows out.
+        val received = half.sumOf { it.size }
+        assertEquals(received - (car.size - data.size), prefix.size)
+    }
+
+    @Test
+    fun `progress callback reports received and emitted separately`() = runBlocking {
+        val data = ByteArray(200 * 1024) { (it * 5).toByte() }
+        val car = singleBlockCar(data)
+        val chunks = split(car, List(300) { 997 })
+        val reports = mutableListOf<Pair<Long, Long>>()
+        val out = flow { chunks.forEach { emit(it) } }
+            .stripCarContainer(onProgress = { received, emitted -> reports += received to emitted })
+            .toList().fold(ByteArray(0)) { acc, b -> acc + b }
+        assertArrayEquals(data, out)
+        assertTrue(reports.isNotEmpty())
+        val (lastReceived, lastEmitted) = reports.last()
+        assertEquals(car.size.toLong(), lastReceived)
+        assertEquals(data.size.toLong(), lastEmitted)
+        // Progressive, not batch: mid-stream reports show payload flowing before EOF.
+        assertTrue(reports.any { (received, emitted) -> received < car.size && emitted > 0 })
+        // Monotonic.
+        assertTrue(reports.zipWithNext().all { (a, b) -> b.first >= a.first && b.second >= a.second })
+    }
 }

@@ -12,9 +12,11 @@ import java.io.ByteArrayOutputStream
  * chunked ciphertext the uploader encrypted. Without this step the CAR header is mistaken
  * for the base IV and every chunk fails its GCM tag check (`bad_decrypt`).
  *
- * Streaming and bounded: only framing and dag-pb directory nodes are ever buffered
- * (roots are kilobytes; buffered dag-pb is capped). Block payloads flow straight
- * through, so a multi-GB piece still stages in constant memory.
+ * Streaming and bounded: raw-leaf payloads emit as they arrive (only the frame
+ * length and CID stage, both tiny), and only dag-pb directory nodes ever buffer
+ * (roots are kilobytes; buffered dag-pb is capped). A single-block multi-GB
+ * piece therefore stages in constant memory and decrypts progressively instead
+ * of pinning the progress bar at 0% until the whole file lands.
  *
  * Scope is deliberately narrow — the IPIP-499 UnixFS shape and nothing else:
  * - Non-CAR input (legacy raw ciphertext) passes through byte-identical.
@@ -28,104 +30,125 @@ import java.io.ByteArrayOutputStream
  *   unknown codec. Truncated/ambiguous prefixes fail OPEN (pass through) so the
  *   decrypt layer — which already fails closed with framing/tag errors — stays the
  *   single judge of validity.
+ *
+ * @param onProgress reports cumulative `(carBytesReceived, payloadBytesEmitted)`
+ * after each processed chunk so the UI can distinguish a slow fetch (received
+ * climbing) from a wedged pipeline (received climbing, emitted flat).
  */
-fun Flow<ByteArray>.stripCarContainer(): Flow<ByteArray> = flow {
+fun Flow<ByteArray>.stripCarContainer(
+    onProgress: ((received: Long, emitted: Long) -> Unit)? = null,
+): Flow<ByteArray> = flow {
     val pending = ByteArrayOutputStream()
     var phase: Phase = Phase.PREFIX
     var headerRoots: List<ByteArray> = emptyList()
-    // Current frame assembly: frames may split across network chunks.
+    // Current frame assembly in three stages: length varint, CID, then payload.
+    // Only the first two ever stage bytes; raw payloads stream straight through.
     var frameLen: Long? = null
-    val frameBuf = ByteArrayOutputStream()
+    var frameCid: ByteArray? = null
+    var frameCodec: Long? = null
+    var payloadRemaining: Long = 0
+    var streamingRaw = false
+    val stage = ByteArrayOutputStream()
     val rawCids = mutableListOf<ByteArray>()
     val dagPb = mutableMapOf<String, ByteArray>()
     var dagPbBuffered = 0L
+    var received = 0L
+    var emitted = 0L
 
     suspend fun emitBytes(bytes: ByteArray) {
-        if (bytes.isNotEmpty()) emit(bytes)
-    }
-
-    /** Classify one complete frame (CID + data, without the length prefix). */
-    suspend fun handleFrame(frame: ByteArray) {
-        val (codec, cidLen) = parseCid(frame, 0)
-            ?: throw HavenError.PlaybackDecryptFailed("CAR block has no parsable CIDv1")
-        val data = frame.copyOfRange(cidLen, frame.size)
-        when (codec) {
-            RAW_CODEC -> {
-                rawCids += frame.copyOfRange(0, cidLen)
-                emitBytes(data)
-            }
-            DAG_PB_CODEC -> {
-                val key = frame.copyOfRange(0, cidLen).toHexKey()
-                if (dagPbBuffered + data.size > MAX_DAG_PB_BYTES) {
-                    throw HavenError.PlaybackDecryptFailed("CAR directory data exceeds the reader's cap")
-                }
-                dagPbBuffered += data.size
-                dagPb[key] = data
-            }
-            else -> throw HavenError.PlaybackDecryptFailed(
-                "Unsupported CAR block codec 0x${codec.toString(16)}: only raw leaves and the dag-pb root are supported",
-            )
+        if (bytes.isNotEmpty()) {
+            emitted += bytes.size
+            emit(bytes)
         }
     }
 
-    /** Feed bytes through the frame assembler: length prefixes may split across chunks. */
+    /** Feed bytes through the frame assembler: lengths, CIDs, and payloads may all split. */
     suspend fun consume(bytes: ByteArray) {
         var rest = bytes
         while (rest.isNotEmpty()) {
             if (frameLen == null) {
                 // A length prefix may already be staged from the previous chunk.
-                val bytes = frameBuf.toByteArray() + rest
-                val parsed = readVarint(bytes, 0)
+                val all = stage.toByteArray() + rest
+                val parsed = readVarint(all, 0)
                 if (parsed == null) {
                     // Still split: stage everything and wait for the next chunk.
-                    if (bytes.size > MAX_PREFIX_BYTES) {
+                    if (all.size > MAX_PREFIX_BYTES) {
                         throw HavenError.PlaybackDecryptFailed("CAR frame has no parsable length")
                     }
-                    frameBuf.reset()
-                    frameBuf.write(bytes)
+                    stage.reset()
+                    stage.write(all)
                     return
                 }
                 val (len, next) = parsed
                 if (len <= 0) throw HavenError.PlaybackDecryptFailed("CAR frame has no parsable length")
                 frameLen = len
-                frameBuf.reset()
-                rest = bytes.copyOfRange(next, bytes.size)
+                stage.reset()
+                rest = all.copyOfRange(next, all.size)
                 continue
             }
-            val need = (frameLen!! - frameBuf.size()).toInt()
-            val take = minOf(need, rest.size)
-            frameBuf.write(rest, 0, take)
+            if (frameCid == null) {
+                // Stage until the CID parses (CIDs are tens of bytes, never megabytes).
+                val all = stage.toByteArray() + rest
+                val parsed = parseCid(all, 0)
+                if (parsed == null) {
+                    if (all.size > MAX_PREFIX_BYTES) {
+                        throw HavenError.PlaybackDecryptFailed("CAR block has no parsable CIDv1")
+                    }
+                    stage.reset()
+                    stage.write(all)
+                    return
+                }
+                val (codec, cidLen) = parsed
+                frameCid = all.copyOfRange(0, cidLen)
+                frameCodec = codec
+                payloadRemaining = frameLen!! - cidLen
+                if (payloadRemaining < 0) {
+                    throw HavenError.PlaybackDecryptFailed("CAR frame shorter than its CID")
+                }
+                when (codec) {
+                    RAW_CODEC -> {
+                        rawCids += frameCid!!
+                        streamingRaw = true
+                    }
+                    DAG_PB_CODEC -> {
+                        streamingRaw = false
+                    }
+                    else -> throw HavenError.PlaybackDecryptFailed(
+                        "Unsupported CAR block codec 0x${codec.toString(16)}: only raw leaves and the dag-pb root are supported",
+                    )
+                }
+                stage.reset()
+                rest = all.copyOfRange(cidLen, all.size)
+                continue
+            }
+            val take = minOf(payloadRemaining, rest.size.toLong()).toInt()
+            if (streamingRaw) {
+                emitBytes(rest.copyOfRange(0, take))
+            } else {
+                if (dagPbBuffered + stage.size() + take > MAX_DAG_PB_BYTES) {
+                    throw HavenError.PlaybackDecryptFailed("CAR directory data exceeds the reader's cap")
+                }
+                stage.write(rest, 0, take)
+            }
             rest = rest.copyOfRange(take, rest.size)
-            if (frameBuf.size().toLong() == frameLen) {
-                handleFrame(frameBuf.toByteArray())
-                frameBuf.reset()
+            payloadRemaining -= take
+            if (payloadRemaining == 0L) {
+                if (!streamingRaw) {
+                    dagPbBuffered += stage.size()
+                    dagPb[frameCid!!.toHexKey()] = stage.toByteArray()
+                }
                 frameLen = null
+                frameCid = null
+                frameCodec = null
+                streamingRaw = false
+                stage.reset()
             }
         }
-    }
-
-    /**
-     * Like [consume], but the first frame length is already primed (prefix seed):
-     * these bytes are frame content, never a length prefix.
-     */
-    suspend fun consumePrimed(bytes: ByteArray) {
-        var rest = bytes
-        while (rest.isNotEmpty() && frameLen != null) {
-            val need = (frameLen!! - frameBuf.size()).toInt()
-            val take = minOf(need, rest.size)
-            frameBuf.write(rest, 0, take)
-            rest = rest.copyOfRange(take, rest.size)
-            if (frameBuf.size().toLong() == frameLen) {
-                handleFrame(frameBuf.toByteArray())
-                frameBuf.reset()
-                frameLen = null
-            }
-        }
-        if (rest.isNotEmpty()) consume(rest)
     }
 
     collect { incoming ->
         if (incoming.isEmpty()) return@collect
+        received += incoming.size
         when (phase) {
             Phase.RAW -> emitBytes(incoming)
             Phase.PREFIX -> {
@@ -140,13 +163,12 @@ fun Flow<ByteArray>.stripCarContainer(): Flow<ByteArray> = flow {
                         phase = Phase.FRAMES
                         headerRoots = parseHeaderRoots(decision.header) ?: emptyList()
                         // Seed the assembler with everything from the first frame's
-                        // CID onward — usually whole frames, sometimes several.
-                        // The first frame length is known; prime it so consume()
-                        // treats the seed as frame bytes, not a length prefix.
+                        // CID onward. The frame length is already known, so consume()
+                        // picks up at the CID stage and streams any payload in the seed.
                         val rest = pending.toByteArray().copyOfRange(decision.frameCidOffset, pending.size())
                         pending.reset()
                         frameLen = decision.firstFrameLen
-                        consumePrimed(rest)
+                        consume(rest)
                     }
                     Decision.Undecided -> {
                         if (pending.size() > MAX_PREFIX_BYTES) {
@@ -159,14 +181,16 @@ fun Flow<ByteArray>.stripCarContainer(): Flow<ByteArray> = flow {
             }
             Phase.FRAMES -> consume(incoming)
         }
+        onProgress?.invoke(received, emitted)
     }
 
     if (phase == Phase.PREFIX) {
         // Stream ended with an undecided prefix: fail open so the decrypt layer judges it.
         emitBytes(pending.toByteArray())
+        onProgress?.invoke(received, emitted)
         return@flow
     }
-    if (phase == Phase.FRAMES && (frameBuf.size() > 0 || frameLen != null)) {
+    if (phase == Phase.FRAMES && (stage.size() > 0 || frameLen != null)) {
         throw HavenError.PlaybackDecryptFailed("Truncated CAR container")
     }
     verifyRoot(rawCids, dagPb, headerRoots)
