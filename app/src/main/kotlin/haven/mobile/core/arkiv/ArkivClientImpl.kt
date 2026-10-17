@@ -481,8 +481,13 @@ class ArkivClientImpl @Inject constructor(
         )
         /** Entities per scan page; discovery pages the listing, it never loads the archive. */
         const val SCAN_PAGE_SIZE = 50
-        /** Hard bound so a huge archive cannot turn discovery into an unbounded crawl. */
-        const val MAX_SCAN_PAGES = 10
+        /**
+         * Runaway guard only (200 × 50 = 10k rows). The previous cap of 10 pages
+         * silently hid gates recorded past the newest ~500 entities, so a holder's
+         * community could be undiscoverable; the scan pages the grp-indexed query
+         * until its cursor ends in the normal case.
+         */
+        const val MAX_SCAN_PAGES = 200
         /**
          * Drip PART rows: the `grp` marker plus `gate_type = i32(4)`, the numeric per-marketcap
          * spelling writers stamp. Same types the SDK emits, so comparison stays type-exact.

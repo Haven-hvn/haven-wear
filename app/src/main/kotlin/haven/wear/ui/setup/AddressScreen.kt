@@ -27,6 +27,10 @@ import haven.wear.ui.theme.HavenColors
  * The whole setup: this is your watch's address. No phrase to write down, no words to confirm,
  * no account. Scan it from a phone wallet and send it the tokens your music is gated on.
  *
+ * The watch holds its OWN wallet, unrelated to any phone/browser wallet: tokens sitting in
+ * another wallet unlock nothing here. The gating ERC-20 or NFT itself must be transferred to
+ * this address.
+ *
  * The same screen is reachable from Settings and from every locked track, so there is nothing to
  * remember from here.
  */
@@ -34,7 +38,7 @@ import haven.wear.ui.theme.HavenColors
 fun AddressScreen(
     address: String?,
     onDone: (() -> Unit)?,
-    caption: String = "Send tokens here to unlock music.",
+    caption: String = "This watch has its own wallet. Tokens in your phone or browser wallet don't count — transfer the gating token or NFT to this address to unlock music.",
 ) {
     val scroll = rememberScrollState()
     ScreenScaffold(
