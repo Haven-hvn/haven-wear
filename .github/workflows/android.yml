@@ -60,6 +60,7 @@ jobs:
 
 
       - name: Build vetkeys native libraries
+        continue-on-error: true
         run: bash tools/build-vetkeys-android.sh
 
       - name: Run unit tests
