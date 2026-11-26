@@ -19,7 +19,7 @@ use ic_vetkeys::{
 use jni::JNIEnv;
 use jni::objects::{JByteArray, JClass, JObject};
 use jni::sys::{jbyteArray, jobjectArray};
-use rand::RngCore;
+use rand::Rng;
 use zeroize::Zeroize;
 
 /// 48-byte G1-compressed transport public key + 32-byte secret scalar.
