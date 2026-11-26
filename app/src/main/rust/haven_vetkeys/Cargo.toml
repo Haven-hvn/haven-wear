@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 # dapp uses against this canister) shipped the same day as ic-vetkeys 0.8.0/0.8.1,
 # so the 0.8 line is the protocol match. Never float this casually.
 ic-vetkeys = "0.9.0"
-jni = "0.22.4"
+jni = "0.21"
 base64 = "0.23.1"
 rand = "0.10.4"
 zeroize = "1.9.2"
