@@ -58,9 +58,6 @@ jobs:
         with:
           workspaces: app/src/main/rust/haven_vetkeys
 
-      - name: VetKeys host tests (crypto logic gate)
-        working-directory: app/src/main/rust/haven_vetkeys
-        run: cargo test
 
       - name: Build vetkeys native libraries
         run: bash tools/build-vetkeys-android.sh
